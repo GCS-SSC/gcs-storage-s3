@@ -77,7 +77,7 @@ describe('AgencyS3StorageConfig', () => {
 
   it('permits credential and connection operations only for an enabled editable provider', async () => {
     const wrapper = mount(AgencyS3StorageConfig, {
-      props: { agencyId: '17', extension, modelValue: config, enabled: true }
+      props: { agencyId: '17', extension, modelValue: config, persistedConfig: config, enabled: true }
     })
     await flushPromises()
 
@@ -94,5 +94,68 @@ describe('AgencyS3StorageConfig', () => {
     expect(post).toHaveBeenCalledWith('/agencies/17/test', expect.objectContaining({
       bucket: 'private-bucket', region: 'ca-central-1', credentialMode: 'agency-secret'
     }))
+  })
+
+  it('configures B2 with an endpoint and mandatory encrypted agency credentials', async () => {
+    const wrapper = mount(AgencyS3StorageConfig, {
+      props: {
+        agencyId: '17', extension, enabled: true,
+        persistedConfig: {
+          service: 'backblaze-b2', bucket: 'private-bucket', endpoint: 's3.us-east-005.backblazeb2.com',
+          keyPrefix: '', credentialMode: 'agency-secret', encryption: 'bucket-default'
+        },
+        modelValue: {
+          service: 'backblaze-b2', bucket: 'private-bucket', endpoint: 's3.us-east-005.backblazeb2.com',
+          keyPrefix: '', credentialMode: 'agency-secret', encryption: 'bucket-default'
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(wrapper.findAll('select')).toHaveLength(1)
+    expect(wrapper.findAll('input').map(input => input.element.value)).toContain('s3.us-east-005.backblazeb2.com')
+    expect(wrapper.text()).not.toContain('Node default credential chain')
+    expect(wrapper.text()).not.toContain('SSE-KMS')
+    expect(wrapper.findAll('input').some(input => input.attributes('type') === 'password')).toBe(true)
+    await wrapper.findAll('button')[1]!.trigger('click')
+    expect(post).toHaveBeenCalledWith('/agencies/17/test', expect.objectContaining({
+      service: 'backblaze-b2', endpoint: 'https://s3.us-east-005.backblazeb2.com', region: 'us-east-005',
+      credentialMode: 'agency-secret', encryption: 'bucket-default'
+    }))
+  })
+
+  it('prevents duplicate concurrent connection canaries', async () => {
+    let resolvePost: (() => void) | undefined
+    post.mockReturnValue(new Promise<void>(resolve => { resolvePost = resolve }))
+    const wrapper = mount(AgencyS3StorageConfig, {
+      props: { agencyId: '17', extension, modelValue: config, persistedConfig: config, enabled: true }
+    })
+    await flushPromises()
+    const button = wrapper.findAll('button')[1]!
+    await button.trigger('click')
+    await button.trigger('click')
+    expect(post).toHaveBeenCalledTimes(1)
+    expect(button.attributes('disabled')).toBeDefined()
+    resolvePost?.()
+    await flushPromises()
+    expect(button.attributes('disabled')).toBeUndefined()
+  })
+
+  it('requires backend configuration changes to be saved before credentials or canaries run', async () => {
+    const wrapper = mount(AgencyS3StorageConfig, {
+      props: {
+        agencyId: '17', extension, enabled: true, persistedConfig: {},
+        modelValue: {
+          service: 'backblaze-b2', bucket: 'private-bucket', endpoint: 's3.us-east-005.backblazeb2.com',
+          keyPrefix: '', credentialMode: 'agency-secret', encryption: 'bucket-default'
+        }
+      }
+    })
+    await flushPromises()
+
+    expect(wrapper.text()).toContain('Save this configuration before managing credentials')
+    expect(wrapper.findAll('button').every(button => button.attributes('disabled') !== undefined)).toBe(true)
+    expect(put).not.toHaveBeenCalled()
+    expect(post).not.toHaveBeenCalled()
   })
 })

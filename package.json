@@ -4,11 +4,12 @@
     "test:unit": "vitest run --config vitest.config.ts",
     "test:coverage": "vitest run --coverage --config vitest.config.ts",
     "test:canary:s3": "GCS_S3_REAL_CANARY=true vitest run --config vitest.canary.config.ts",
+    "test:canary:b2": "GCS_B2_REAL_CANARY=true bun --env-file=.env.b2.local run vitest run --config vitest.canary.config.ts tests/canary/b2-real.test.ts",
     "typecheck": "vue-tsc --noEmit"
   },
   "dependencies": {
     "@aws-sdk/client-s3": "^3.883.0", "@aws-sdk/credential-providers": "^3.883.0",
-    "@gcs-ssc/extensions": "^0.2.1", "nanoid": "^5.1.6", "zod": "^4.3.6"
+    "@gcs-ssc/extensions": "^0.2.1", "kysely": "^0.28.11", "nanoid": "^5.1.6", "zod": "^4.3.6"
   },
   "peerDependencies": { "vue": "^3.5.28" },
   "devDependencies": {
