@@ -1,0 +1,19 @@
+{
+  "name": "@gcs-ssc/gcs-storage-s3", "version": "0.1.0", "private": true, "type": "module",
+  "scripts": {
+    "test:unit": "vitest run --config vitest.config.ts",
+    "test:coverage": "vitest run --coverage --config vitest.config.ts",
+    "test:canary:s3": "GCS_S3_REAL_CANARY=true vitest run --config vitest.canary.config.ts",
+    "typecheck": "vue-tsc --noEmit"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.883.0", "@aws-sdk/credential-providers": "^3.883.0",
+    "@gcs-ssc/extensions": "^0.2.1", "nanoid": "^5.1.6", "zod": "^4.3.6"
+  },
+  "peerDependencies": { "vue": "^3.5.28" },
+  "devDependencies": {
+    "@types/node": "^25.3.0", "@vitejs/plugin-vue": "^6.0.4", "@vitest/coverage-v8": "^4.0.18",
+    "@vue/test-utils": "^2.4.6", "jsdom": "^28.1.0", "typescript": "^5.9.3",
+    "vitest": "^4.0.18", "vue": "^3.5.28", "vue-tsc": "^3.2.4"
+  }
+}
