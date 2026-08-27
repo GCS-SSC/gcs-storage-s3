@@ -32,6 +32,7 @@ describe('S3 agency configuration', () => {
   it('requires a KMS key and rejects unsafe prefixes', () => {
     expect(() => parseS3AgencyConfig({ bucket: 'b', region: 'r', encryption: 'sse-kms' })).toThrow()
     expect(() => parseS3AgencyConfig({ bucket: 'b', region: 'r', keyPrefix: '../escape' })).toThrow()
+    expect(() => parseS3AgencyConfig({ bucket: 'b', region: 'r', endpoint: 'https://ignored.example' })).toThrow()
   })
   it('validates and masks explicit credentials', () => {
     expect(S3CredentialSchema.parse({ accessKeyId: 'AKIA12345678', secretAccessKey: 'secret' })).toBeTruthy()

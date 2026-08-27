@@ -6,8 +6,15 @@ import {
 } from '@gcs-ssc/extensions/server'
 import type { Kysely } from 'kysely'
 import type { GcsExtensionJsonConfig } from '@gcs-ssc/extensions'
-import { parseS3AgencyConfig, S3CredentialSchema, maskAccessKeyId, type S3Credential } from '../shared/config.ts'
+import { S3CredentialSchema, maskAccessKeyId, type S3Credential } from '../shared/config.ts'
 import { createS3Client, testS3Connection } from './s3.ts'
+import {
+  parseS3AgencyConfigRequest,
+  parseS3CredentialRequest,
+  storageConnectionFailedError,
+  storageProviderDisabledError,
+  storageServiceMismatchError
+} from './user-errors.ts'
 
 export const EXTENSION_KEY = 'gcs-storage-s3'
 export const CREDENTIAL_SECRET_KEY = 'aws-credentials'
@@ -51,7 +58,7 @@ export const getCredentialSummary = async (context: GcsExtensionRouteContext) =>
 
 export const saveCredential = async (context: GcsExtensionRouteContext) => {
   const ownerId = agencyId(context)
-  const credential = S3CredentialSchema.parse(await context.readBody())
+  const credential = parseS3CredentialRequest(await context.readBody())
   const writeAuthorization = context.writeAuthorization
   if (!writeAuthorization) throw new Error('S3 credential writes require host-provided transaction authorization.')
   const database = context.db as {
@@ -69,12 +76,16 @@ export const saveCredential = async (context: GcsExtensionRouteContext) => {
       .where('_deleted', '=', false)
       .forUpdate()
       .executeTakeFirst()
-    if (!configuration?.enabled) throw new Error('S3 storage must be enabled before credentials can be saved')
-    const config = parseS3AgencyConfig(configuration.config)
-    if (credential.service !== config.service) throw new Error('S3 credentials do not match the configured storage service')
+    if (!configuration?.enabled) throw storageProviderDisabledError()
+    const config = parseS3AgencyConfigRequest(configuration.config)
+    if (credential.service !== config.service) throw storageServiceMismatchError()
     const client = createS3Client(config, credential, { maxAttempts: 1 })
     try {
-      await testS3Connection(client, config)
+      try {
+        await testS3Connection(client, config)
+      } catch {
+        throw storageConnectionFailedError()
+      }
     } finally {
       client.destroy()
     }

@@ -70,6 +70,15 @@ describe('encrypted agency S3 credentials', () => {
     expect(JSON.stringify(result)).not.toContain('private')
   })
 
+  it('maps incomplete credential bodies to a structured validation error', async () => {
+    await expect(saveCredential(context({ accessKeyId: '', secretAccessKey: '' }))).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'GCS_STORAGE_S3_CREDENTIALS_INVALID',
+      details: expect.arrayContaining([expect.objectContaining({ path: 'accessKeyId' })])
+    })
+    expect(setSecret).not.toHaveBeenCalled()
+  })
+
   it('fails closed without the host encryption root key', async () => {
     delete process.env.GCS_EXTENSION_SECRETS_KEY
     await expect(getCredentialSummary(context())).rejects.toThrow('GCS_EXTENSION_SECRETS_KEY is required')
@@ -78,7 +87,10 @@ describe('encrypted agency S3 credentials', () => {
   it('rejects credentials tagged for a different configured service', async () => {
     await expect(saveCredential(context({
       service: 'backblaze-b2', accessKeyId: 'b2-id', secretAccessKey: 'b2-secret'
-    }))).rejects.toThrow('do not match the configured storage service')
+    }))).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'GCS_STORAGE_S3_SERVICE_MISMATCH'
+    })
     expect(setSecret).not.toHaveBeenCalled()
   })
 
@@ -86,7 +98,10 @@ describe('encrypted agency S3 credentials', () => {
     testConnection.mockRejectedValueOnce(new Error('invalid credentials'))
     await expect(saveCredential(context({
       service: 'amazon-s3', accessKeyId: 'replacement', secretAccessKey: 'wrong'
-    }))).rejects.toThrow('invalid credentials')
+    }))).rejects.toMatchObject({
+      statusCode: 400,
+      code: 'GCS_STORAGE_S3_CONNECTION_FAILED'
+    })
     expect(setSecret).not.toHaveBeenCalled()
     expect(destroyClient).toHaveBeenCalledOnce()
   })

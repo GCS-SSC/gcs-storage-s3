@@ -35,7 +35,10 @@ export const S3AgencyConfigSchema = z.object({
   encryption: z.enum(['bucket-default', 'sse-kms']).default('bucket-default'),
   kmsKeyId: z.string().trim().max(2048).optional()
 }).superRefine((value, context) => {
-  if (value.service === 'amazon-s3' && !value.region) context.addIssue({ code: 'custom', path: ['region'], message: 'AWS region is required.' })
+  if (value.service === 'amazon-s3') {
+    if (!value.region) context.addIssue({ code: 'custom', path: ['region'], message: 'AWS region is required.' })
+    if (value.endpoint !== undefined) context.addIssue({ code: 'custom', path: ['endpoint'], message: 'Custom Amazon S3 endpoints are not supported.' })
+  }
   if (value.service === 'backblaze-b2') {
     if (!value.endpoint) context.addIssue({ code: 'custom', path: ['endpoint'], message: 'Backblaze B2 S3 endpoint is required.' })
     else {
