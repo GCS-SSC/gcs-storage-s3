@@ -7,7 +7,7 @@ import {
 import type { Kysely } from 'kysely'
 import type { GcsExtensionJsonConfig } from '@gcs-ssc/extensions'
 import { S3CredentialSchema, maskAccessKeyId, type S3Credential } from '../shared/config.ts'
-import { createS3Client, testS3Connection } from './s3.ts'
+import { createS3Client, resolveS3CanaryTimeoutMs, testS3Connection } from './s3.ts'
 import {
   parseS3AgencyConfigRequest,
   parseS3CredentialRequest,
@@ -29,6 +29,12 @@ interface CredentialConfigurationDatabase {
     _deleted: boolean
   }
 }
+
+type LockedS3ConfigurationCallback<T> = (
+  config: ReturnType<typeof parseS3AgencyConfigRequest>,
+  trx: Kysely<CredentialConfigurationDatabase>,
+  ownerId: string
+) => Promise<T>
 
 const rootKey = (): string => {
   const value = process.env.GCS_EXTENSION_SECRETS_KEY
@@ -56,19 +62,23 @@ export const credentialSummary = (credential: S3Credential | null) => credential
 export const getCredentialSummary = async (context: GcsExtensionRouteContext) =>
   credentialSummary(await loadCredential(context.db, agencyId(context)))
 
-export const saveCredential = async (context: GcsExtensionRouteContext) => {
+/** Runs an agency S3 operation against one freshly authorized, locked configuration snapshot. */
+export const withLockedS3Configuration = async <T>(
+  context: GcsExtensionRouteContext,
+  callback: LockedS3ConfigurationCallback<T>
+): Promise<T> => {
   const ownerId = agencyId(context)
-  const credential = parseS3CredentialRequest(await context.readBody())
   const writeAuthorization = context.writeAuthorization
-  if (!writeAuthorization) throw new Error('S3 credential writes require host-provided transaction authorization.')
+  if (!writeAuthorization) throw new Error('S3 configuration writes require host-provided transaction authorization.')
   const database = context.db as {
-    transaction: () => { execute: <T>(callback: (trx: unknown) => Promise<T>) => Promise<T> }
+    transaction: () => { execute: <R>(operation: (trx: unknown) => Promise<R>) => Promise<R> }
   }
-  await database.transaction().execute(async trx => {
+  return await database.transaction().execute(async rawTrx => {
+    const trx = rawTrx as Kysely<CredentialConfigurationDatabase>
     await writeAuthorization.lockAuthState(trx)
     await lockGcsExtensionLifecycleScope(trx as never, EXTENSION_KEY, ownerId)
     await (writeAuthorization.authorizeCurrentScope ?? writeAuthorization.authorizeCurrentEntity)(trx)
-    const configuration = await (trx as Kysely<CredentialConfigurationDatabase>)
+    const configuration = await trx
       .selectFrom('extensions.agency_enablement')
       .select(['config', 'enabled'])
       .where('extension_key', '=', EXTENSION_KEY)
@@ -77,12 +87,19 @@ export const saveCredential = async (context: GcsExtensionRouteContext) => {
       .forUpdate()
       .executeTakeFirst()
     if (!configuration?.enabled) throw storageProviderDisabledError()
-    const config = parseS3AgencyConfigRequest(configuration.config)
+    return await callback(parseS3AgencyConfigRequest(configuration.config), trx, ownerId)
+  })
+}
+
+export const saveCredential = async (context: GcsExtensionRouteContext) => {
+  const credential = parseS3CredentialRequest(await context.readBody())
+  await withLockedS3Configuration(context, async (config, trx, ownerId) => {
     if (credential.service !== config.service) throw storageServiceMismatchError()
-    const client = createS3Client(config, credential, { maxAttempts: 1 })
+    const timeoutMs = resolveS3CanaryTimeoutMs()
+    const client = createS3Client(config, credential, { maxAttempts: 1, requestTimeoutMs: timeoutMs })
     try {
       try {
-        await testS3Connection(client, config)
+        await testS3Connection(client, config, { timeoutMs })
       } catch {
         throw storageConnectionFailedError()
       }

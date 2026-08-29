@@ -1,11 +1,35 @@
-import { defineGcsFileStorageProviderAdapter, type GcsFileStorageOperationContext, type GcsFileStorageProviderAdapterBase } from '@gcs-ssc/extensions/server'
+import {
+  defineGcsFileStorageProviderAdapter,
+  GCS_FILE_STORAGE_PROVIDER_OBJECT_ID_MAX_BYTES,
+  type GcsFileStorageOperationContext,
+  type GcsFileStorageProviderAdapterBase
+} from '@gcs-ssc/extensions/server'
 import { parseS3AgencyConfig, S3CredentialSchema, type S3Credential } from '../shared/config.ts'
-import { buildObjectKey, createS3Client, deleteObject, putObject, readObject, readObjectVersion, type S3CommandClient } from './s3.ts'
+import {
+  buildObjectKey,
+  createS3Client,
+  deleteObject,
+  putObject,
+  readObject,
+  readObjectVersion,
+  resolveS3OperationTimeoutMs,
+  type S3CommandClient
+} from './s3.ts'
 
 export const createStorageAdapter = (dependencies: {
   createClient?: typeof createS3Client
+  operationTimeoutMs?: number
 } = {}): GcsFileStorageProviderAdapterBase => {
   const clientFactory = dependencies.createClient ?? createS3Client
+  const operationTimeoutMs = (): number => dependencies.operationTimeoutMs ?? resolveS3OperationTimeoutMs()
+
+  const buildProviderObjectKey = (prefix: string, objectName: string): string => {
+    const key = buildObjectKey(prefix, objectName)
+    if (Buffer.byteLength(key, 'utf8') > GCS_FILE_STORAGE_PROVIDER_OBJECT_ID_MAX_BYTES) {
+      throw new Error(`S3 object key exceeds the ${GCS_FILE_STORAGE_PROVIDER_OBJECT_ID_MAX_BYTES}-byte provider object identity limit`)
+    }
+    return key
+  }
 
   const resolveCredential = async (
     config: ReturnType<typeof parseS3AgencyConfig>,
@@ -65,11 +89,14 @@ export const createStorageAdapter = (dependencies: {
     validateAgencyConfig: config => parseS3AgencyConfig(config),
     writeObject: async input => {
       const config = parseS3AgencyConfig(input.agencyConfig)
+      const key = buildProviderObjectKey(config.keyPrefix, input.objectName)
+      const timeoutMs = operationTimeoutMs()
       const { credential } = await resolveCredential(config, input.secrets)
-      const client = clientFactory(config, credential, { maxAttempts: 1 }) as S3CommandClient
-      const key = buildObjectKey(config.keyPrefix, input.objectName)
+      const client = clientFactory(config, credential, { maxAttempts: 1, requestTimeoutMs: timeoutMs }) as S3CommandClient
       let versionId: string | undefined
-      try { versionId = await putObject(client, config, key, input.bytes, input.contentType) } finally { client.destroy?.() }
+      try {
+        versionId = await putObject(client, config, key, input.bytes, input.contentType, { timeoutMs })
+      } finally { client.destroy?.() }
       return {
         objectId: key,
         locator: {
@@ -84,20 +111,24 @@ export const createStorageAdapter = (dependencies: {
       }
     },
     readObject: async input => {
+      const timeoutMs = operationTimeoutMs()
       const config = storedConfig(parseS3AgencyConfig(input.agencyConfig), input)
       const { credential } = await resolveCredential(config, input.secrets)
-      const client = clientFactory(config, credential) as S3CommandClient
-      try { return await readObject(client, config, locatorKey(input), locatorVersionId(input)) } finally { client.destroy?.() }
+      const client = clientFactory(config, credential, { requestTimeoutMs: timeoutMs }) as S3CommandClient
+      try {
+        return await readObject(client, config, locatorKey(input), locatorVersionId(input), { timeoutMs })
+      } finally { client.destroy?.() }
     },
     deleteObject: async input => {
+      const timeoutMs = operationTimeoutMs()
       const config = storedConfig(parseS3AgencyConfig(input.agencyConfig), input)
       const { credential } = await resolveCredential(config, input.secrets)
-      const client = clientFactory(config, credential) as S3CommandClient
+      const client = clientFactory(config, credential, { requestTimeoutMs: timeoutMs }) as S3CommandClient
       try {
         const key = locatorKey(input)
         const recordedVersionId = locatorVersionId(input)
-        const versionId = recordedVersionId ?? await readObjectVersion(client, config, key)
-        await deleteObject(client, config, key, versionId)
+        const versionId = recordedVersionId ?? await readObjectVersion(client, config, key, { timeoutMs })
+        await deleteObject(client, config, key, versionId, { timeoutMs })
       } finally { client.destroy?.() }
     }
   }

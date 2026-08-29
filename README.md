@@ -10,8 +10,12 @@ The backend fingerprint cannot change while active attachments reference the pro
 
 Writes use a single SDK attempt because retrying an ambiguously completed PUT can create multiple billable versions under one key. Each write carries a random metadata token; on an ambiguous failure the adapter performs a best-effort HEAD and exact-version delete only when that token proves the recovered version belongs to the failed write. A later host/application retry receives a new opaque key. Version-specific reads and deletes retain the SDK's bounded standard retry behavior. The 10 MiB host upload cap deliberately uses one `PutObject`; multipart upload would add requests and orphan-part risk without a size benefit.
 
+Before resolving credentials or constructing an S3 client, each provider write builds the exact final `prefix/objectName` key and enforces the public SDK's 512-byte UTF-8 provider-object-ID maximum. A rejected key therefore sends no PUT and cannot leave a remote object, including for multibyte prefixes and long host-generated template names.
+
+Ordinary PUT, GET body consumption, HEAD, and DELETE phases have both transport timeouts and abort deadlines. `GCS_STORAGE_S3_OPERATION_TIMEOUT_MS` sets each phase deadline in milliseconds, defaults to 60 seconds, and accepts integers from 100 milliseconds through 10 minutes. Ambiguous PUT recovery gives HEAD and exact-version DELETE their own fresh deadlines; a failed recovery emits one sanitized `storage_cleanup_failed` event while the original PUT error remains authoritative. The connection canary retains its separately configured shorter deadline.
+
 Saving replacement agency credentials first writes, reads, verifies, and deletes a random canary object inside the authorized transaction, so a bad rotation cannot overwrite the last working secret. The explicit connection test runs the same three-request canary on demand.
 
-Run `bun run typecheck`, `bun run test:unit`, and `bun run test:coverage`. A real AWS test is opt-in with `GCS_S3_REAL_CANARY=true`, `GCS_S3_CANARY_BUCKET`, and `AWS_REGION`, then `bun run test:canary:s3`.
+Run `bun run typecheck`, `bun run test:unit`, `bun run test:integration`, and `bun run test:coverage`. The integration suite uses a loopback stalled HTTP server and needs no cloud credentials. A real AWS test is opt-in with `GCS_S3_REAL_CANARY=true`, `GCS_S3_CANARY_BUCKET`, and `AWS_REGION`, then `bun run test:canary:s3`.
 
 For a real Backblaze test, create the ignored, mode-`0600` `.env.b2.local` containing `B2_S3_BUCKET`, `B2_S3_ENDPOINT`, `B2_S3_KEY_ID`, and `B2_S3_APPLICATION_KEY`, then run `bun run test:canary:b2`. Use a bucket-restricted application key rather than the unsupported B2 master application key.

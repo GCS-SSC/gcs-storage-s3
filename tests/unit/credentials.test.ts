@@ -7,6 +7,7 @@ const testConnection = vi.fn()
 const destroyClient = vi.fn()
 vi.mock('../../server/s3', () => ({
   createS3Client: vi.fn(() => ({ send: vi.fn(), destroy: destroyClient })),
+  resolveS3CanaryTimeoutMs: () => 5_000,
   testS3Connection: testConnection
 }))
 vi.mock('@gcs-ssc/extensions/server', async importOriginal => ({
@@ -16,7 +17,7 @@ vi.mock('@gcs-ssc/extensions/server', async importOriginal => ({
   , lockGcsExtensionLifecycleScope: lockLifecycle
 }))
 
-const { getCredentialSummary, saveCredential } = await import('../../server/credentials')
+const { getCredentialSummary, saveCredential, withLockedS3Configuration } = await import('../../server/credentials')
 
 const configurationQuery = {
   select: vi.fn(), where: vi.fn(), forUpdate: vi.fn(),
@@ -40,6 +41,10 @@ const context = (body: unknown = {}) => ({
 describe('encrypted agency S3 credentials', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    configurationQuery.executeTakeFirst.mockResolvedValue({
+      enabled: true,
+      config: { service: 'amazon-s3', bucket: 'bucket', region: 'ca-central-1' }
+    })
     testConnection.mockResolvedValue(undefined)
     process.env.GCS_EXTENSION_SECRETS_KEY = Buffer.alloc(32, 1).toString('base64')
   })
@@ -68,6 +73,41 @@ describe('encrypted agency S3 credentials', () => {
     expect(testConnection).toHaveBeenCalledOnce()
     expect(destroyClient).toHaveBeenCalledOnce()
     expect(JSON.stringify(result)).not.toContain('private')
+  })
+
+  it('freshly authorizes and locks lifecycle plus saved configuration before invoking an operation', async () => {
+    const requestContext = context() as unknown as {
+      writeAuthorization: { lockAuthState: ReturnType<typeof vi.fn>, authorizeCurrentScope: ReturnType<typeof vi.fn> }
+    }
+    const callback = vi.fn(async () => 'complete')
+
+    await expect(withLockedS3Configuration(requestContext as never, callback)).resolves.toBe('complete')
+
+    expect(requestContext.writeAuthorization.lockAuthState).toHaveBeenCalledWith(transactionDb)
+    expect(lockLifecycle).toHaveBeenCalledWith(transactionDb, 'gcs-storage-s3', '17')
+    expect(requestContext.writeAuthorization.authorizeCurrentScope).toHaveBeenCalledWith(transactionDb)
+    expect(configurationQuery.forUpdate).toHaveBeenCalled()
+    expect(callback).toHaveBeenCalledWith(expect.objectContaining({
+      service: 'amazon-s3',
+      bucket: 'bucket'
+    }), transactionDb, '17')
+    expect(requestContext.writeAuthorization.lockAuthState.mock.invocationCallOrder[0])
+      .toBeLessThan(lockLifecycle.mock.invocationCallOrder[0] as number)
+    expect(lockLifecycle.mock.invocationCallOrder[0])
+      .toBeLessThan(requestContext.writeAuthorization.authorizeCurrentScope.mock.invocationCallOrder[0] as number)
+    expect(requestContext.writeAuthorization.authorizeCurrentScope.mock.invocationCallOrder[0])
+      .toBeLessThan(callback.mock.invocationCallOrder[0] as number)
+  })
+
+  it('does not invoke a connection operation after the provider is disabled under lock', async () => {
+    configurationQuery.executeTakeFirst.mockResolvedValueOnce({ enabled: false, config: {} })
+    const callback = vi.fn()
+
+    await expect(withLockedS3Configuration(context(), callback)).rejects.toMatchObject({
+      statusCode: 409,
+      code: 'GCS_STORAGE_S3_PROVIDER_DISABLED'
+    })
+    expect(callback).not.toHaveBeenCalled()
   })
 
   it('maps incomplete credential bodies to a structured validation error', async () => {

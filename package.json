@@ -3,6 +3,7 @@
   "scripts": {
     "test:unit": "vitest run --config vitest.config.ts",
     "test:coverage": "vitest run --coverage --config vitest.config.ts",
+    "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:canary:s3": "GCS_S3_REAL_CANARY=true vitest run --config vitest.canary.config.ts",
     "test:canary:b2": "GCS_B2_REAL_CANARY=true bun --env-file=.env.b2.local run vitest run --config vitest.canary.config.ts tests/canary/b2-real.test.ts",
     "typecheck": "vue-tsc --noEmit"
