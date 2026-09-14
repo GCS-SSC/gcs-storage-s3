@@ -92,17 +92,17 @@ const testConnection = async () => {
 
 <template>
   <div class="space-y-4">
-    <ExtensionFormField :label="t('service')"><select v-model="local.service" :disabled="isReadOnly"><option value="amazon-s3">{{ t('amazon') }}</option><option value="backblaze-b2">{{ t('backblaze') }}</option></select></ExtensionFormField>
-    <ExtensionFormField :label="t('bucket')"><ExtensionInput v-model="local.bucket" :disabled="isReadOnly" /></ExtensionFormField>
-    <ExtensionFormField v-if="isBackblaze" :label="t('b2Endpoint')"><ExtensionInput v-model="local.endpoint" :disabled="isReadOnly" /></ExtensionFormField>
-    <ExtensionFormField v-else :label="t('region')"><ExtensionInput v-model="local.region" :disabled="isReadOnly" /></ExtensionFormField>
+    <ExtensionFormField :label="t('service')"><select v-model="local.service" :aria-label="t('service')" :disabled="isReadOnly"><option value="amazon-s3">{{ t('amazon') }}</option><option value="backblaze-b2">{{ t('backblaze') }}</option></select></ExtensionFormField>
+    <ExtensionFormField :label="t('bucket')" required><ExtensionInput v-model="local.bucket" :disabled="isReadOnly" /></ExtensionFormField>
+    <ExtensionFormField v-if="isBackblaze" :label="t('b2Endpoint')" required><ExtensionInput v-model="local.endpoint" :disabled="isReadOnly" /></ExtensionFormField>
+    <ExtensionFormField v-else :label="t('region')" required><ExtensionInput v-model="local.region" :disabled="isReadOnly" /></ExtensionFormField>
     <ExtensionFormField :label="t('prefix')"><ExtensionInput v-model="local.keyPrefix" :disabled="isReadOnly" /></ExtensionFormField>
-    <ExtensionFormField v-if="!isBackblaze" :label="t('mode')"><select v-model="local.credentialMode" :disabled="isReadOnly"><option value="default-chain">{{ t('defaults') }}</option><option value="agency-secret">{{ t('agency') }}</option></select></ExtensionFormField>
-    <ExtensionFormField v-if="!isBackblaze" :label="t('encryption')"><select v-model="local.encryption" :disabled="isReadOnly"><option value="bucket-default">{{ t('bucketDefault') }}</option><option value="sse-kms">{{ t('kms') }}</option></select></ExtensionFormField>
-    <ExtensionFormField v-if="local.encryption === 'sse-kms'" :label="t('kmsKey')"><ExtensionInput v-model="local.kmsKeyId" :disabled="isReadOnly" /></ExtensionFormField>
+    <ExtensionFormField v-if="!isBackblaze" :label="t('mode')"><select v-model="local.credentialMode" :aria-label="t('mode')" :disabled="isReadOnly"><option value="default-chain">{{ t('defaults') }}</option><option value="agency-secret">{{ t('agency') }}</option></select></ExtensionFormField>
+    <ExtensionFormField v-if="!isBackblaze" :label="t('encryption')"><select v-model="local.encryption" :aria-label="t('encryption')" :disabled="isReadOnly"><option value="bucket-default">{{ t('bucketDefault') }}</option><option value="sse-kms">{{ t('kms') }}</option></select></ExtensionFormField>
+    <ExtensionFormField v-if="local.encryption === 'sse-kms'" :label="t('kmsKey')" required><ExtensionInput v-model="local.kmsKeyId" :disabled="isReadOnly" /></ExtensionFormField>
     <template v-if="local.credentialMode === 'agency-secret'">
-      <ExtensionFormField :label="t('access')"><ExtensionInput v-model="accessKeyId" :disabled="connectionActionsDisabled" /></ExtensionFormField>
-      <ExtensionFormField :label="t('secret')"><ExtensionInput v-model="secretAccessKey" type="password" :disabled="connectionActionsDisabled" /></ExtensionFormField>
+      <ExtensionFormField :label="t('access')" required><ExtensionInput v-model="accessKeyId" :disabled="connectionActionsDisabled" /></ExtensionFormField>
+      <ExtensionFormField :label="t('secret')" required><ExtensionInput v-model="secretAccessKey" type="password" :disabled="connectionActionsDisabled" /></ExtensionFormField>
       <ExtensionFormField v-if="!isBackblaze" :label="t('token')"><ExtensionInput v-model="sessionToken" type="password" :disabled="connectionActionsDisabled" /></ExtensionFormField>
       <ExtensionSaveButton :label="t('save')" :disabled="connectionActionsDisabled" @click="saveCredentials" />
       <p v-if="maskedAccessKey">{{ maskedAccessKey }}</p>

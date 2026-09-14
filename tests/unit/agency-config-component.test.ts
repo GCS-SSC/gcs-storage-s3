@@ -62,6 +62,22 @@ describe('AgencyS3StorageConfig', () => {
     post.mockReset().mockResolvedValue({})
   })
 
+  it('identifies service-specific required fields and keeps optional configuration optional', async () => {
+    const wrapper = mount(AgencyS3StorageConfig, {
+      props: { agencyId: '17', extension, modelValue: config, persistedConfig: config, enabled: true }
+    })
+    await flushPromises()
+    const field = (label: string) => wrapper.findAll('label').find(item => item.attributes('label') === label)!
+    expect(field('Bucket').attributes('required')).toBeDefined()
+    expect(field('AWS region').attributes('required')).toBeDefined()
+    expect(field('Key prefix (optional)').attributes('required')).toBeUndefined()
+    expect(wrapper.findAll('select').every(select => Boolean(select.attributes('aria-label')))).toBe(true)
+    await wrapper.findAll('select')[2]!.setValue('sse-kms')
+    expect(field('KMS key ID').attributes('required')).toBeDefined()
+    await wrapper.findAll('select')[2]!.setValue('bucket-default')
+    expect(field('KMS key ID')).toBeUndefined()
+  })
+
   it('shows masked credential state while disabling every mutation for a Viewer', async () => {
     const wrapper = mount(AgencyS3StorageConfig, {
       props: { agencyId: '17', extension, modelValue: config, disabled: true, readOnly: true }
