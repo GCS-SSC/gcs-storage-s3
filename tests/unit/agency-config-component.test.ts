@@ -1,3 +1,4 @@
+import { translateGcsExtensionMessage, type GcsExtensionMessages } from '@gcs-ssc/extensions'
 // @vitest-environment jsdom
 
 import { defineComponent, h } from 'vue'
@@ -10,7 +11,7 @@ const post = vi.fn()
 
 vi.mock('@gcs-ssc/extensions/ui', () => ({
   useExtensionApi: () => ({ get, put, post }),
-  useExtensionI18n: () => ({ locale: { value: 'en' } }),
+  useExtensionI18n: (messages: GcsExtensionMessages) => ({ locale: { value: 'en' }, t: (key: string) => translateGcsExtensionMessage(messages, 'en', key) }),
   ExtensionFormField: defineComponent({
     setup(_props, { slots }) {
       return () => h('label', slots.default?.())

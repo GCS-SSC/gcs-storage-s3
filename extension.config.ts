@@ -1,6 +1,6 @@
 import { defineGcsExtension } from '@gcs-ssc/extensions'
 export default defineGcsExtension({
-  key: 'gcs-storage-s3', sdkVersion: '^0.2.1',
+  key: 'gcs-storage-s3', sdkVersion: '^0.3.0',
   requiredHostCapabilities: ['agency-config', 'server-handlers', 'server-handler-rbac', 'extension-ui', 'extension-api-client', 'extension-secrets', 'extension-lifecycle-hooks', 'file-storage-provider'],
   name: { en: 'S3-compatible storage', fr: 'Stockage compatible S3' },
   description: { en: 'Stores private attachments in an agency-configured Amazon S3 or Backblaze B2 bucket.', fr: 'Stocke les pièces jointes privées dans un compartiment Amazon S3 ou Backblaze B2 configuré par l’organisation.' },

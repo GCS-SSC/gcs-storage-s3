@@ -1,4 +1,6 @@
 <script setup lang="ts">
+import { AgencyS3StorageConfigMessages } from '../i18n/AgencyS3StorageConfig'
+
 import { computed, onMounted, ref, watch, type Ref } from 'vue'
 import type { GcsExtensionJsonConfig, GcsResolvedExtension } from '@gcs-ssc/extensions'
 import { ExtensionButton, ExtensionFormField, ExtensionInput, ExtensionSaveButton, useExtensionApi, useExtensionI18n } from '@gcs-ssc/extensions/ui'
@@ -13,7 +15,7 @@ const { agencyId, extension, persistedConfig, enabled = true, disabled = false, 
   readOnly?: boolean
 }>()
 const model = defineModel<GcsExtensionJsonConfig>({ required: true })
-const { locale } = useExtensionI18n()
+const { t: t } = useExtensionI18n(AgencyS3StorageConfigMessages)
 const api = useExtensionApi(extension.key)
 const initial = { service: 'amazon-s3', bucket: '', region: '', endpoint: '', keyPrefix: '', credentialMode: 'default-chain' as const, encryption: 'bucket-default' as const }
 const local: Ref<Record<string, string>> = ref({ ...initial, ...model.value } as Record<string, string>)
@@ -42,11 +44,6 @@ const persistedBackendMatches = computed(() => {
 })
 const connectionActionsDisabled = computed(() => providerActionsDisabled.value || !persistedBackendMatches.value)
 const isBackblaze = computed(() => local.value.service === 'backblaze-b2')
-const labels = {
-  en: { service: 'Storage service', amazon: 'Amazon S3', backblaze: 'Backblaze B2', bucket: 'Bucket', region: 'AWS region', b2Endpoint: 'Backblaze B2 S3 endpoint', prefix: 'Key prefix (optional)', mode: 'Credential mode', defaults: 'Node default credential chain', agency: 'Agency access keys', encryption: 'Encryption', bucketDefault: 'Bucket default', kms: 'SSE-KMS', kmsKey: 'KMS key ID', access: 'Access key ID / B2 key ID', secret: 'Secret access key / B2 application key', token: 'Session token (optional)', save: 'Save credentials', test: 'Test connection', saved: 'Credentials saved', credentialFailed: 'Credentials could not be saved', saveConfigFirst: 'Save this configuration before managing credentials or testing the connection.', connected: 'Connection succeeded', failed: 'Connection failed' },
-  fr: { service: 'Service de stockage', amazon: 'Amazon S3', backblaze: 'Backblaze B2', bucket: 'Compartiment', region: 'Région AWS', b2Endpoint: 'Point de terminaison S3 Backblaze B2', prefix: 'Préfixe de clé (facultatif)', mode: 'Mode d’identification', defaults: 'Chaîne d’identification Node par défaut', agency: 'Clés d’accès de l’organisation', encryption: 'Chiffrement', bucketDefault: 'Valeur par défaut du compartiment', kms: 'SSE-KMS', kmsKey: 'ID de clé KMS', access: 'ID de clé d’accès / ID de clé B2', secret: 'Clé d’accès secrète / clé d’application B2', token: 'Jeton de session (facultatif)', save: 'Enregistrer les identifiants', test: 'Tester la connexion', saved: 'Identifiants enregistrés', credentialFailed: 'Impossible d’enregistrer les identifiants', saveConfigFirst: 'Enregistrez cette configuration avant de gérer les identifiants ou de tester la connexion.', connected: 'Connexion réussie', failed: 'Échec de la connexion' }
-}
-const t = (key: keyof typeof labels.en) => locale.value === 'fr' ? labels.fr[key] : labels.en[key]
 
 watch(local, value => {
   model.value = {

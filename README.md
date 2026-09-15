@@ -19,3 +19,13 @@ Saving replacement agency credentials first writes, reads, verifies, and deletes
 Run `bun run typecheck`, `bun run test:unit`, `bun run test:integration`, and `bun run test:coverage`. The integration suite uses a loopback stalled HTTP server and needs no cloud credentials. A real AWS test is opt-in with `GCS_S3_REAL_CANARY=true`, `GCS_S3_CANARY_BUCKET`, and `AWS_REGION`, then `bun run test:canary:s3`.
 
 For a real Backblaze test, create the ignored, mode-`0600` `.env.b2.local` containing `B2_S3_BUCKET`, `B2_S3_ENDPOINT`, `B2_S3_KEY_ID`, and `B2_S3_APPLICATION_KEY`, then run `bun run test:canary:b2`. Use a bucket-restricted application key rather than the unsupported B2 master application key.
+
+## Translation ownership
+
+Requires SDK 0.3.0. Interface catalogs live in this package's `i18n/` directory.
+Define matching English/French keys and named placeholders with
+`defineGcsExtensionMessages`, then use `useExtensionI18n(catalog)` in UI or
+`translateGcsExtensionMessage` in shared/server code. There is no host message
+lookup or fallback. Keep extension-authored common labels and validation text in
+this package; treat bilingual domain values and already-localized errors as data.
+The package owns translation tests and includes catalogs in its coverage inventory.
