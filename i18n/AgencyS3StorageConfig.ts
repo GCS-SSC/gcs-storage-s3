@@ -37,7 +37,7 @@ export const AgencyS3StorageConfigMessages = defineGcsExtensionMessages({
     "prefix": "Préfixe de clé (facultatif)",
     "mode": "Mode d’identification",
     "defaults": "Chaîne d’identification Node par défaut",
-    "agency": "Clés d’accès de l’organisation",
+    "agency": "Clés d’accès de l’organisme",
     "encryption": "Chiffrement",
     "bucketDefault": "Valeur par défaut du compartiment",
     "kms": "SSE-KMS",
