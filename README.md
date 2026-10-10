@@ -45,3 +45,5 @@ These reduced-schema ownership fixtures complement the extension’s normal test
 Set `AUDIT_EXTENSION_POSTGRES_URL` to a disposable PostgreSQL database URL ending
 in `_test` to run the same suite on PostgreSQL; the adapter creates and removes an
 isolated database. Without that variable, the suite uses in-memory PGlite.
+
+Cleanup retries reuse the recorded object version. An unversioned write records the explicit `null` version, so deletion remains idempotent if bucket versioning is later enabled. Legacy deletion retries treat confirmed S3 404 responses as completed cleanup and preserve permission/transport errors. Host L1 scheduling resumes durable cleanup automatically after provider recovery; uploads remain single-attempt operations.

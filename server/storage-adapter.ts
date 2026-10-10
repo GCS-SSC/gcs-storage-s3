@@ -4,6 +4,7 @@ import {
   type GcsFileStorageOperationContext,
   type GcsFileStorageProviderAdapterBase
 } from '@gcs-ssc/extensions/server'
+import { S3ServiceException } from '@aws-sdk/client-s3'
 import { parseS3AgencyConfig, S3CredentialSchema, type S3Credential } from '../shared/config.ts'
 import {
   buildObjectKey,
@@ -105,7 +106,7 @@ export const createStorageAdapter = (dependencies: {
           region: config.region,
           service: config.service,
           forcePathStyle: config.forcePathStyle,
-          ...(versionId ? { versionId } : {}),
+          versionId: versionId ?? 'null',
           ...(config.service === 'backblaze-b2' ? { endpoint: config.endpoint } : {})
         }
       }
@@ -128,7 +129,9 @@ export const createStorageAdapter = (dependencies: {
         const key = locatorKey(input)
         const recordedVersionId = locatorVersionId(input)
         const versionId = recordedVersionId ?? await readObjectVersion(client, config, key, { timeoutMs })
-        await deleteObject(client, config, key, versionId, { timeoutMs })
+        await deleteObject(client, config, key, versionId ?? 'null', { timeoutMs })
+      } catch (error) {
+        if (!(error instanceof S3ServiceException) || error.$metadata.httpStatusCode !== 404) throw error
       } finally { client.destroy?.() }
     }
   }

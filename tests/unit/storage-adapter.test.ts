@@ -1,4 +1,4 @@
-import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand } from '@aws-sdk/client-s3'
+import { DeleteObjectCommand, HeadObjectCommand, PutObjectCommand, S3ServiceException } from '@aws-sdk/client-s3'
 import { GCS_FILE_STORAGE_PROVIDER_OBJECT_ID_MAX_BYTES } from '@gcs-ssc/extensions/server'
 import { describe, expect, it, vi } from 'vitest'
 import { createStorageAdapter } from '../../server/storage-adapter'
@@ -12,6 +12,29 @@ const templateObjectNameAtLimit = `${templateObjectNameBase}${'a'.repeat(
 )}.html`
 
 describe('S3 storage adapter', () => {
+  it.each(['version-1', undefined])('replays a lost delete response against the same recorded version (%s)', async versionId => {
+    let stored = true
+    let responseLost = false
+    const send = vi.fn(async command => {
+      if (command instanceof PutObjectCommand) return versionId ? { VersionId: versionId } : {}
+      if (!(command instanceof DeleteObjectCommand)) throw new Error('Deletion must use its recorded version without HEAD')
+      expect(command.input.VersionId).toBe(versionId ?? 'null')
+      stored = false
+      if (!responseLost) {
+        responseLost = true
+        throw new Error('delete response lost')
+      }
+      return {}
+    })
+    const adapter = createStorageAdapter({ createClient: (() => ({ send, destroy: vi.fn() })) as never })
+    const reference = await adapter.writeObject({ ...base, objectName: 'object', bytes: new Uint8Array([1]), contentType: 'x/test' })
+    await expect(adapter.deleteObject({ ...base, ...reference })).rejects.toThrow('delete response lost')
+    expect(stored).toBe(false)
+    await expect(adapter.deleteObject({ ...base, ...reference })).resolves.toBeUndefined()
+    const deletes = send.mock.calls.map(call => call[0]).filter(command => command instanceof DeleteObjectCommand)
+    expect(deletes).toHaveLength(2)
+    expect(deletes[0].input).toEqual(deletes[1].input)
+  })
   it('writes, reads, and deletes while preserving stable identity', async () => {
     const send = vi.fn().mockResolvedValueOnce({ VersionId: 'version-1' }).mockResolvedValueOnce({ Body: { transformToByteArray: async () => new Uint8Array([9]) } }).mockResolvedValueOnce({})
     const destroy = vi.fn()
@@ -144,6 +167,20 @@ describe('S3 storage adapter', () => {
     })
     expect(send.mock.calls.map(call => call[0]?.constructor)).toEqual([HeadObjectCommand, DeleteObjectCommand])
     expect((send.mock.calls[1]?.[0] as DeleteObjectCommand).input.VersionId).toBe('legacy-version')
+  })
+  it('completes a legacy deletion replay after a lost response, while retaining permission failures', async () => {
+    const send = vi.fn().mockResolvedValueOnce({ VersionId: 'legacy-version' })
+      .mockRejectedValueOnce(new Error('delete response lost'))
+      .mockRejectedValueOnce(new S3ServiceException({ name: 'NotFound', $fault: 'client', $metadata: { httpStatusCode: 404 } }))
+      .mockRejectedValueOnce(new S3ServiceException({ name: 'AccessDenied', $fault: 'client', $metadata: { httpStatusCode: 403 } }))
+    const destroy = vi.fn()
+    const adapter = createStorageAdapter({ createClient: (() => ({ send, destroy })) as never })
+    const input = { ...base, objectId: 'legacy-object', locator: { key: 'legacy-object', bucket: 'bucket', region: 'ca-central-1' } }
+    await expect(adapter.deleteObject(input)).rejects.toThrow('delete response lost')
+    await expect(adapter.deleteObject(input)).resolves.toBeUndefined()
+    await expect(adapter.deleteObject(input)).rejects.toMatchObject({ name: 'AccessDenied' })
+    expect(send.mock.calls.map(call => call[0]?.constructor)).toEqual([HeadObjectCommand, DeleteObjectCommand, HeadObjectCommand, HeadObjectCommand])
+    expect(destroy).toHaveBeenCalledTimes(3)
   })
   it('destroys the client after a stalled PUT and its bounded ambiguous HEAD cleanup', async () => {
     vi.useFakeTimers()

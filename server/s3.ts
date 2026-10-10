@@ -204,7 +204,7 @@ export const deleteObject = async (
   const timeoutMs = options.timeoutMs ?? resolveS3OperationTimeoutMs()
   await withS3OperationDeadline('delete', timeoutMs, async abortSignal => {
     await client.send(new DeleteObjectCommand({
-      Bucket: config.bucket, Key: key, ...(versionId ? { VersionId: versionId } : {})
+      Bucket: config.bucket, Key: key, VersionId: versionId ?? 'null'
     }), { abortSignal })
   })
 }
