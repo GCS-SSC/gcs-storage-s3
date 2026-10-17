@@ -1,17 +1,18 @@
 import { translateGcsExtensionMessage, type GcsExtensionMessages } from '@gcs-ssc/extensions'
 // @vitest-environment jsdom
 
-import { defineComponent, h } from 'vue'
+import { defineComponent, h, ref } from 'vue'
 import { flushPromises, mount } from '@vue/test-utils'
 import { beforeEach, describe, expect, it, vi } from 'vitest'
 
+const locale = ref('en')
 const get = vi.fn()
 const put = vi.fn()
 const post = vi.fn()
 
 vi.mock('@gcs-ssc/extensions/ui', () => ({
   useExtensionApi: () => ({ get, put, post }),
-  useExtensionI18n: (messages: GcsExtensionMessages) => ({ locale: { value: 'en' }, t: (key: string) => translateGcsExtensionMessage(messages, 'en', key) }),
+  useExtensionI18n: (messages: GcsExtensionMessages) => ({ locale, t: (key: string) => translateGcsExtensionMessage(messages, locale.value, key) }),
   ExtensionFormField: defineComponent({
     setup(_props, { slots }) {
       return () => h('label', slots.default?.())
@@ -58,9 +59,30 @@ const config = {
 
 describe('AgencyS3StorageConfig', () => {
   beforeEach(() => {
+    locale.value = 'en'
     get.mockReset().mockResolvedValue({ accessKeyIdMasked: 'AKIA••••WXYZ' })
     put.mockReset().mockResolvedValue({ accessKeyIdMasked: 'AKIA••••WXYZ' })
     post.mockReset().mockResolvedValue({})
+  })
+
+  it.each([false, true])('retranslates retained feedback after switching locale (failure=%s)', async failure => {
+    if (failure) {
+      put.mockRejectedValue(new Error('provider failure'))
+      post.mockRejectedValue(new Error('provider failure'))
+    }
+    const wrapper = mount(AgencyS3StorageConfig, {
+      props: { agencyId: '17', extension, modelValue: config, persistedConfig: config, enabled: true }
+    })
+    await flushPromises()
+    await wrapper.findAll('button')[0]!.trigger('click')
+    await wrapper.findAll('button')[1]!.trigger('click')
+    await flushPromises()
+    expect(wrapper.text()).toContain(failure ? 'Credentials could not be saved' : 'Credentials saved')
+    locale.value = 'fr-CA'
+    await flushPromises()
+    expect(wrapper.text()).toContain(failure ? 'Impossible d’enregistrer les identifiants' : 'Identifiants enregistrés')
+    expect(wrapper.text()).toContain(failure ? 'Échec de la connexion' : 'Connexion réussie')
+    wrapper.unmount()
   })
 
   it('identifies service-specific required fields and keeps optional configuration optional', async () => {

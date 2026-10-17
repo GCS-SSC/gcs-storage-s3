@@ -22,9 +22,9 @@ const local: Ref<Record<string, string>> = ref({ ...initial, ...model.value } as
 const accessKeyId: Ref<string> = ref('')
 const secretAccessKey: Ref<string> = ref('')
 const sessionToken: Ref<string> = ref('')
-const credentialStatus: Ref<string> = ref('')
+const credentialStatus: Ref<'saved' | 'credentialFailed' | null> = ref(null)
 const maskedAccessKey: Ref<string | null> = ref(null)
-const connectionStatus: Ref<string> = ref('')
+const connectionStatus: Ref<'connected' | 'failed' | null> = ref(null)
 const connectionPending: Ref<boolean> = ref(false)
 const endpoint = `/agencies/${agencyId}`
 const isReadOnly = computed(() => disabled || readOnly)
@@ -71,9 +71,9 @@ const saveCredentials = async () => {
       ...(!isBackblaze.value && sessionToken.value ? { sessionToken: sessionToken.value } : {})
     })
     maskedAccessKey.value = summary.accessKeyIdMasked
-    accessKeyId.value = ''; secretAccessKey.value = ''; sessionToken.value = ''; credentialStatus.value = t('saved')
+    accessKeyId.value = ''; secretAccessKey.value = ''; sessionToken.value = ''; credentialStatus.value = 'saved'
   } catch {
-    credentialStatus.value = t('credentialFailed')
+    credentialStatus.value = 'credentialFailed'
   }
 }
 onMounted(async () => {
@@ -83,7 +83,7 @@ onMounted(async () => {
 const testConnection = async () => {
   if (connectionActionsDisabled.value || connectionPending.value) return
   connectionPending.value = true
-  try { const config = parseS3AgencyConfig(model.value); await api.post(`${endpoint}/test`, config); connectionStatus.value = t('connected') } catch { connectionStatus.value = t('failed') } finally { connectionPending.value = false }
+  try { const config = parseS3AgencyConfig(model.value); await api.post(`${endpoint}/test`, config); connectionStatus.value = 'connected' } catch { connectionStatus.value = 'failed' } finally { connectionPending.value = false }
 }
 </script>
 
@@ -103,10 +103,10 @@ const testConnection = async () => {
       <ExtensionFormField v-if="!isBackblaze" :label="t('token')"><ExtensionInput v-model="sessionToken" type="password" :disabled="connectionActionsDisabled" /></ExtensionFormField>
       <ExtensionSaveButton :label="t('save')" :disabled="connectionActionsDisabled" @click="saveCredentials" />
       <p v-if="maskedAccessKey">{{ maskedAccessKey }}</p>
-      <p>{{ credentialStatus }}</p>
+      <p>{{ credentialStatus ? t(credentialStatus) : '' }}</p>
     </template>
     <p v-if="!providerActionsDisabled && !persistedBackendMatches">{{ t('saveConfigFirst') }}</p>
     <ExtensionButton :disabled="connectionActionsDisabled || connectionPending" @click="testConnection">{{ t('test') }}</ExtensionButton>
-    <p>{{ connectionStatus }}</p>
+    <p>{{ connectionStatus ? t(connectionStatus) : '' }}</p>
   </div>
 </template>
