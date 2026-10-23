@@ -70,11 +70,12 @@ const handleObjectRequest = (
 }
 
 const withLoopbackObjectStore = async (
-  run: (endpoint: string, methods: string[], objects: Set<string>) => Promise<void>
+  run: (endpoint: string, methods: string[], objects: Set<string>) => Promise<void>,
+  handleRequest: typeof handleObjectRequest = handleObjectRequest
 ): Promise<void> => {
   const methods: string[] = []
   const objects = new Set<string>()
-  const server = createServer((request, response) => handleObjectRequest(request, response, methods, objects))
+  const server = createServer((request, response) => handleRequest(request, response, methods, objects))
   await new Promise<void>((resolve, reject) => {
     server.once('error', reject)
     server.listen(0, '127.0.0.1', resolve)
@@ -103,6 +104,70 @@ const operation = (
   objectName,
   bytes: new TextEncoder().encode('template'),
   contentType: 'text/html'
+})
+
+describe('S3 exact-version cleanup recovery over loopback HTTP', () => {
+  it('retries partial failures and lost responses without deleting another version of the same key', async () => {
+    const key = 'attachments/shared-key'
+    const versions = ['completed-version', 'denied-version', 'lost-response-version']
+    const retainedVersion = 'retained-version'
+    const requests: { method: string, key: string, versionId: string | null }[] = []
+    const deletions: string[] = []
+    let recovered = false
+    const handleRequest: typeof handleObjectRequest = (request, response, methods, objects) => {
+      const method = request.method ?? 'UNKNOWN'
+      const versionId = new URL(request.url ?? '/', 'http://127.0.0.1').searchParams.get('versionId')
+      methods.push(method)
+      requests.push({ method, key: requestKey(request), versionId })
+      request.resume()
+      request.once('end', () => {
+        if (versionId === 'denied-version' && !recovered) {
+          response.writeHead(403, { 'content-type': 'application/xml' })
+          response.end('<Error><Code>AccessDenied</Code><Message>Temporarily denied</Message></Error>')
+          return
+        }
+        if (versionId !== null && objects.delete(versionId)) deletions.push(versionId)
+        if (versionId === 'lost-response-version' && !recovered) {
+          request.socket.destroy()
+          return
+        }
+        response.writeHead(204)
+        response.end()
+      })
+    }
+
+    await withLoopbackObjectStore(async (endpoint, methods, objects) => {
+      for (const versionId of [...versions, retainedVersion]) objects.add(versionId)
+      const createClient: typeof createS3Client = (_config, _resolvedCredential, options) =>
+        createS3Client(localConfig(endpoint), credential, options)
+      const adapter = createStorageAdapter({ createClient, operationTimeoutMs: 5_000 })
+      const operations = versions.map(versionId => ({
+        agencyId: '17',
+        purpose: 'attachment' as const,
+        agencyConfig: providerConfig,
+        secrets: { get: async () => null },
+        objectId: key,
+        locator: {
+          key, bucket: 'bucket', region: 'ca-central-1', service: 'amazon-s3', forcePathStyle: false, versionId
+        }
+      }))
+
+      const firstAttempt = await Promise.allSettled(operations.map(input => adapter.deleteObject(input)))
+      expect(firstAttempt.map(result => result.status)).toEqual(['fulfilled', 'rejected', 'rejected'])
+      expect(firstAttempt[1]).toMatchObject({ reason: { name: 'AccessDenied', $metadata: { httpStatusCode: 403 } } })
+      expect(objects).toEqual(new Set(['denied-version', retainedVersion]))
+      expect(requests.filter(request => request.versionId === 'lost-response-version')).toHaveLength(3)
+      expect(requests.filter(request => request.versionId === 'denied-version')).toHaveLength(1)
+
+      recovered = true
+      const retry = await Promise.allSettled(operations.map(input => adapter.deleteObject(input)))
+      expect(retry.map(result => result.status)).toEqual(['fulfilled', 'fulfilled', 'fulfilled'])
+      expect(objects).toEqual(new Set([retainedVersion]))
+      expect(deletions.sort()).toEqual([...versions].sort())
+      expect(methods.every(method => method === 'DELETE')).toBe(true)
+      expect(requests.every(request => request.key === key && versions.includes(request.versionId ?? ''))).toBe(true)
+    }, handleRequest)
+  })
 })
 
 describe('S3 final object-key preflight over loopback HTTP', () => {

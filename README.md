@@ -4,7 +4,7 @@ Private Amazon S3 and Backblaze B2 object-storage provider for GCS-SSC. The host
 
 Amazon S3 configuration supports bucket, AWS region, an optional key prefix, Node's default credential provider chain or agency-scoped encrypted access keys, and bucket-default encryption or SSE-KMS. Backblaze B2 configuration supports the bucket's official S3 endpoint, an optional key prefix, bucket-default encryption, and a bucket-scoped application key stored as an agency encrypted secret. The endpoint is restricted to HTTPS `s3.<region>.backblazeb2.com` hosts; arbitrary S3-compatible endpoints are not accepted because an application-entered endpoint would create an SSRF and credential-exfiltration boundary that URL validation alone cannot secure.
 
-B2 uses path-style bucket addressing and derives its signing region from the validated endpoint. New locators pin the service, bucket, region, endpoint, addressing mode, and provider-returned object version ID. Deletes target that exact version so versioned AWS buckets and always-versioned B2 buckets do not retain billable hidden object versions. Legacy locators without a version ID retain key-only deletion behavior.
+B2 uses path-style bucket addressing and derives its signing region from the validated endpoint. New locators pin the service, bucket, region, endpoint, addressing mode, and provider-returned object version ID. Deletes target that exact version so versioned AWS buckets and always-versioned B2 buckets do not retain billable hidden object versions. Legacy locators without a version ID resolve it with HEAD before exact-version deletion. Confirmed 404 responses complete cleanup, while permission and transport failures remain retryable.
 
 The backend fingerprint cannot change while active attachments reference the provider; credential rotation and key-prefix changes remain available. Encrypted credential payloads are tagged with their service, and legacy untagged credentials are treated as Amazon S3 credentials only. Browser responses expose only a masked access-key identifier. Presigned browser transfers and custom attachment metadata are not supported.
 
@@ -16,7 +16,7 @@ Ordinary PUT, GET body consumption, HEAD, and DELETE phases have both transport 
 
 Saving replacement agency credentials first writes, reads, verifies, and deletes a random canary object inside the authorized transaction, so a bad rotation cannot overwrite the last working secret. The explicit connection test runs the same three-request canary on demand.
 
-Run `bun run typecheck`, `bun run test:unit`, `bun run test:integration`, and `bun run test:coverage`. The integration suite uses a loopback stalled HTTP server and needs no cloud credentials. A real AWS test is opt-in with `GCS_S3_REAL_CANARY=true`, `GCS_S3_CANARY_BUCKET`, and `AWS_REGION`, then `bun run test:canary:s3`.
+Run `bun run typecheck`, `bun run test:unit`, `bun run test:integration`, and `bun run test:coverage`. The integration suite uses loopback HTTP servers and needs no cloud credentials. It covers stalled transports, object-key preflight, and exact-version delete replay after partial failures or a lost response. The cleanup test checks that another version of the same key remains. A real AWS test is opt-in with `GCS_S3_REAL_CANARY=true`, `GCS_S3_CANARY_BUCKET`, and `AWS_REGION`, then `bun run test:canary:s3`.
 
 For a real Backblaze test, create the ignored, mode-`0600` `.env.b2.local` containing `B2_S3_BUCKET`, `B2_S3_ENDPOINT`, `B2_S3_KEY_ID`, and `B2_S3_APPLICATION_KEY`, then run `bun run test:canary:b2`. Use a bucket-restricted application key rather than the unsupported B2 master application key.
 
@@ -46,4 +46,4 @@ Set `AUDIT_EXTENSION_POSTGRES_URL` to a disposable PostgreSQL database URL endin
 in `_test` to run the same suite on PostgreSQL; the adapter creates and removes an
 isolated database. Without that variable, the suite uses in-memory PGlite.
 
-Cleanup retries reuse the recorded object version. An unversioned write records the explicit `null` version, so deletion remains idempotent if bucket versioning is later enabled. Legacy deletion retries treat confirmed S3 404 responses as completed cleanup and preserve permission/transport errors. Host L1 scheduling resumes durable cleanup automatically after provider recovery; uploads remain single-attempt operations.
+Cleanup retries reuse the recorded object version. An unversioned write records the explicit `null` version, so deletion remains idempotent if bucket versioning is later enabled. Legacy deletion retries treat confirmed S3 404 responses as completed cleanup and preserve permission/transport errors. The host's background queue resumes durable cleanup after provider recovery. Uploads remain single-attempt operations.
