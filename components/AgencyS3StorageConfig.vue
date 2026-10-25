@@ -88,19 +88,19 @@ const testConnection = async () => {
 </script>
 
 <template>
-  <div class="space-y-4">
-    <ExtensionFormField :label="t('service')"><select v-model="local.service" :aria-label="t('service')" :disabled="isReadOnly"><option value="amazon-s3">{{ t('amazon') }}</option><option value="backblaze-b2">{{ t('backblaze') }}</option></select></ExtensionFormField>
-    <ExtensionFormField :label="t('bucket')" required><ExtensionInput v-model="local.bucket" :disabled="isReadOnly" /></ExtensionFormField>
-    <ExtensionFormField v-if="isBackblaze" :label="t('b2Endpoint')" required><ExtensionInput v-model="local.endpoint" :disabled="isReadOnly" /></ExtensionFormField>
-    <ExtensionFormField v-else :label="t('region')" required><ExtensionInput v-model="local.region" :disabled="isReadOnly" /></ExtensionFormField>
-    <ExtensionFormField :label="t('prefix')"><ExtensionInput v-model="local.keyPrefix" :disabled="isReadOnly" /></ExtensionFormField>
-    <ExtensionFormField v-if="!isBackblaze" :label="t('mode')"><select v-model="local.credentialMode" :aria-label="t('mode')" :disabled="isReadOnly"><option value="default-chain">{{ t('defaults') }}</option><option value="agency-secret">{{ t('agency') }}</option></select></ExtensionFormField>
-    <ExtensionFormField v-if="!isBackblaze" :label="t('encryption')"><select v-model="local.encryption" :aria-label="t('encryption')" :disabled="isReadOnly"><option value="bucket-default">{{ t('bucketDefault') }}</option><option value="sse-kms">{{ t('kms') }}</option></select></ExtensionFormField>
-    <ExtensionFormField v-if="local.encryption === 'sse-kms'" :label="t('kmsKey')" required><ExtensionInput v-model="local.kmsKeyId" :disabled="isReadOnly" /></ExtensionFormField>
+  <div class="space-y-4" data-field-scope="extension.gcs-storage-s3.agency-s3-storage-config">
+    <ExtensionFormField :label="t('service')" data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.service"><select v-model="local.service" :aria-label="t('service')" :disabled="isReadOnly"><option value="amazon-s3">{{ t('amazon') }}</option><option value="backblaze-b2">{{ t('backblaze') }}</option></select></ExtensionFormField>
+    <ExtensionFormField :label="t('bucket')" required data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.bucket"><ExtensionInput v-model="local.bucket" :disabled="isReadOnly" /></ExtensionFormField>
+    <ExtensionFormField v-if="isBackblaze" :label="t('b2Endpoint')" required data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.b2-endpoint"><ExtensionInput v-model="local.endpoint" :disabled="isReadOnly" /></ExtensionFormField>
+    <ExtensionFormField v-else :label="t('region')" required data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.region"><ExtensionInput v-model="local.region" :disabled="isReadOnly" /></ExtensionFormField>
+    <ExtensionFormField :label="t('prefix')" data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.prefix"><ExtensionInput v-model="local.keyPrefix" :disabled="isReadOnly" /></ExtensionFormField>
+    <ExtensionFormField v-if="!isBackblaze" :label="t('mode')" data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.mode"><select v-model="local.credentialMode" :aria-label="t('mode')" :disabled="isReadOnly"><option value="default-chain">{{ t('defaults') }}</option><option value="agency-secret">{{ t('agency') }}</option></select></ExtensionFormField>
+    <ExtensionFormField v-if="!isBackblaze" :label="t('encryption')" data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.encryption"><select v-model="local.encryption" :aria-label="t('encryption')" :disabled="isReadOnly"><option value="bucket-default">{{ t('bucketDefault') }}</option><option value="sse-kms">{{ t('kms') }}</option></select></ExtensionFormField>
+    <ExtensionFormField v-if="local.encryption === 'sse-kms'" :label="t('kmsKey')" required data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.kms-key"><ExtensionInput v-model="local.kmsKeyId" :disabled="isReadOnly" /></ExtensionFormField>
     <template v-if="local.credentialMode === 'agency-secret'">
-      <ExtensionFormField :label="t('access')" required><ExtensionInput v-model="accessKeyId" :disabled="connectionActionsDisabled" /></ExtensionFormField>
-      <ExtensionFormField :label="t('secret')" required><ExtensionInput v-model="secretAccessKey" type="password" :disabled="connectionActionsDisabled" /></ExtensionFormField>
-      <ExtensionFormField v-if="!isBackblaze" :label="t('token')"><ExtensionInput v-model="sessionToken" type="password" :disabled="connectionActionsDisabled" /></ExtensionFormField>
+      <ExtensionFormField :label="t('access')" required data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.access"><ExtensionInput v-model="accessKeyId" :disabled="connectionActionsDisabled" /></ExtensionFormField>
+      <ExtensionFormField :label="t('secret')" required data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.secret"><ExtensionInput v-model="secretAccessKey" type="password" :disabled="connectionActionsDisabled" /></ExtensionFormField>
+      <ExtensionFormField v-if="!isBackblaze" :label="t('token')" data-ui-target="extension.gcs-storage-s3.agency-s3-storage-config.token"><ExtensionInput v-model="sessionToken" type="password" :disabled="connectionActionsDisabled" /></ExtensionFormField>
       <ExtensionSaveButton :label="t('save')" :disabled="connectionActionsDisabled" @click="saveCredentials" />
       <p v-if="maskedAccessKey">{{ maskedAccessKey }}</p>
       <p>{{ credentialStatus ? t(credentialStatus) : '' }}</p>
