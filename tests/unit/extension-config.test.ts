@@ -7,6 +7,6 @@ describe('S3 storage extension manifest', () => {
     expect(extension.requiredHostCapabilities).toContain('extension-secrets')
     expect(extension.requiredHostCapabilities).toContain('extension-lifecycle-hooks')
     expect(extension.nitroPlugin).toBe('./server/plugins/configuration-guard.ts')
-    expect(extension.fileStorageProvider?.adapter.path).toBe('./server/storage-adapter.ts')
+    expect(extension.fileStorageProvider).toEqual({ adapter: { path: './server/storage-adapter.ts' } })
   })
 })
